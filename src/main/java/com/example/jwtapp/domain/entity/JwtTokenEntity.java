@@ -1,22 +1,21 @@
-package com.example.jwtapp.entity;
+package com.example.jwtapp.domain.entity;
 
-import java.util.Date;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Lob;
-import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import java.time.Instant;
 
 @Entity
 @Table(name = "jwt_tokens")
 public class JwtTokenEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Lob
@@ -30,18 +29,23 @@ public class JwtTokenEntity {
     @Column(name = "is_valid", nullable = false)
     private Boolean isValid;
 
-    @Temporal(TemporalType.TIMESTAMP)
-    @Column(name = "created_at", nullable = false)
-    private Date createdAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
 
     public JwtTokenEntity() {
     }
 
-    public JwtTokenEntity(String originalToken, String payloadJson, Boolean isValid, Date createdAt) {
+    public JwtTokenEntity(String originalToken, String payloadJson, Boolean isValid) {
         this.originalToken = originalToken;
         this.payloadJson = payloadJson;
         this.isValid = isValid;
-        this.createdAt = createdAt;
+    }
+
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
     }
 
     public Long getId() {
@@ -72,15 +76,15 @@ public class JwtTokenEntity {
         return isValid;
     }
 
-    public void setIsValid(Boolean isValid) {
-        this.isValid = isValid;
+    public void setIsValid(Boolean valid) {
+        isValid = valid;
     }
 
-    public Date getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(Date createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 }

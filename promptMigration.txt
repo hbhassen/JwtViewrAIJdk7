@@ -1,0 +1,244 @@
+
+Tu es un architecte Java / Spring senior.
+
+Ta mission est de MODERNISER et MIGRER une application legacy Spring Boot existante vers une stack moderne,
+tout en conservant STRICTEMENT le même comportement fonctionnel.
+
+========================
+CONTEXTE INITIAL (LEGACY)
+========================
+
+L’application existante possède les caractéristiques suivantes :
+
+- Langage : Java 7
+- Framework : Spring Boot 1.5.22.RELEASE (Spring Framework 4.x)
+- Build : Maven
+- APIs REST :
+
+1) POST /api/jwt/validate
+   - Corps JSON :
+     {
+       "token": "JWT_STRING_HERE"
+     }
+   - L’application :
+     - Charge un certificat X.509 depuis le classpath (/certs/public.crt)
+     - Extrait la clé publique
+     - Vérifie la signature du JWT (RS256)
+     - Vérifie l’expiration
+     - Stocke en base H2 :
+       - originalToken (TEXT)
+       - payloadJson (TEXT)
+       - isValid (BOOLEAN)
+       - createdAt (TIMESTAMP)
+     - Retourne toujours :
+       {
+         "tokenId": <ID en base>,
+         "valid": true/false
+       }
+     - Même si le token est invalide, il est stocké et un ID est retourné
+
+2) GET /api/jwt/payload/{id}
+   - Charge l’enregistrement depuis la base
+   - Retourne UNIQUEMENT le payload décodé du JWT en JSON
+
+- Base de données : H2 en mémoire
+- JPA : Hibernate via Spring Data JPA
+- Librairie JWT : io.jsonwebtoken:jjwt 0.9.1 (obsolète)
+- Pas de Spring Security
+- Pas (ou très peu) de tests
+- Utilisation des packages javax.*
+
+========================
+OBJECTIF DE LA MIGRATION
+========================
+
+Tu dois migrer cette application vers :
+
+- Java 17 (LTS)
+- Spring Boot 3.5.6
+- Spring Framework 6.x
+- Stack moderne avec bonnes pratiques
+
+⚠️ En conservant STRICTEMENT :
+- Les mêmes endpoints
+- Les mêmes entrées/sorties
+- Le même comportement de stockage
+- Le même comportement de restitution du payload
+
+Tout en améliorant :
+- La qualité du code
+- La sécurité
+- La testabilité
+- La maintenabilité
+- L’architecture
+
+========================
+STACK TECHNIQUE CIBLE
+========================
+
+Langage :
+- Java 17
+- Utilisation AUTORISÉE de :
+  - record pour les DTO
+  - var pour les variables locales
+  - switch expressions
+  - text blocks
+  - Streams, Optional, API fonctionnelle
+- Style lisible, pédagogique, non excessivement fonctionnel
+
+Framework :
+- Spring Boot 3.5.6
+- Spring Framework 6
+- Packages jakarta.* obligatoires (jakarta.persistence, jakarta.validation, etc.)
+- Injection par constructeur uniquement
+- @RestController, @PostMapping, @GetMapping
+- @ConfigurationProperties pour la configuration
+
+Build :
+- Maven
+- Plugin Spring Boot officiel
+- Surefire + Failsafe
+- JaCoCo avec règle minimale de 70 % de couverture
+
+JWT :
+- Remplacer jjwt 0.9.1 par une librairie moderne compatible Java 17 :
+  - io.jsonwebtoken (versions modernes) OU Nimbus JOSE JWT
+- Validation RS256 avec certificat X.509
+- Gestion robuste :
+  - Signature invalide
+  - Token expiré
+- Interdiction de logger un JWT complet
+  - Logger au maximum les 10 premiers caractères ou un hash
+
+Base de données :
+- H2 par défaut
+- JPA avec jakarta.persistence
+- Conservation stricte des champs :
+  - id, originalToken, payloadJson, isValid, createdAt
+
+========================
+ORGANISATION DU CODE
+========================
+
+Utiliser une architecture propre :
+
+com.example.jwtapp
+- JwtApplication.java
+- config
+- controller
+- service
+- repository
+- domain / entity
+- dto (records Java 17)
+- jwt (validation, extraction, certificats)
+- exception (exceptions métier + handler global)
+
+========================
+AMÉLIORATIONS OBLIGATOIRES
+========================
+
+1) Sécurité :
+- Ne jamais logger un JWT complet
+- Valider la requête :
+  - token non nul
+  - token non vide
+  - taille maximale raisonnable
+- Utiliser jakarta.validation (@NotBlank, etc.)
+
+2) Gestion d’erreurs :
+- Implémenter un @RestControllerAdvice global
+- Mapping propre :
+  - 400 → erreur de requête
+  - 404 → ID non trouvé
+  - 401/403 → JWT invalide ou expiré
+  - 500 → erreur interne
+
+3) Configuration :
+- Externaliser le chemin du certificat
+- Utiliser Profiles :
+  - dev
+  - test
+
+4) Qualité :
+- Injection par constructeur
+- @Transactional sur les services
+- Pas de méthodes utilitaires statiques quand l’injection est possible
+- Responsabilités séparées clairement
+
+========================
+EXIGENCES DE TESTS
+========================
+
+Frameworks :
+- JUnit 5
+- Spring Boot Test
+- MockMvc
+- AssertJ
+- Mockito si nécessaire
+
+Tests unitaires obligatoires :
+- Validation JWT
+- Chargement certificat
+- Extraction du payload
+- Service métier (cas valides / invalides / expirés)
+
+Tests d’intégration obligatoires :
+- POST /api/jwt/validate :
+  - Token valide
+  - Token invalide
+  - Token expiré
+- GET /api/jwt/payload/{id} :
+  - ID existant
+  - ID inexistant
+
+Couverture :
+- Configuration JaCoCo
+- Minimum 70 % de couverture de lignes
+
+========================
+DOCUMENTATION À PRODUIRE
+========================
+
+1) guide_migration.md (orienté développeur)
+- Stack legacy
+- Stack cible
+- Étapes de migration
+- Migration javax → jakarta
+- Migration JWT
+- Introduction Java 17 (records, streams, etc.)
+- Sécurité
+- Tests & couverture
+- Bonnes pratiques post-migration
+
+2) guide_utilisateur.md (orienté utilisateur)
+- Prérequis (Java 17, Maven)
+- Lancement de l’application
+- Description des APIs
+- Exemples curl
+- Codes de retour
+- Limitations H2
+- Lancement des tests
+- Accès au rapport de couverture
+
+========================
+LIVRABLES À GÉNÉRER
+========================
+
+- pom.xml moderne Java 17 / Spring Boot 3.5.6
+- Code Java complet
+- Tests unitaires et d’intégration
+- application.yml avec profils
+- guide_migration.md
+- guide_utilisateur.md
+
+========================
+RÈGLES FINALES
+========================
+
+- Le code doit être 100 % compatible :
+  - Java 17
+  - Spring Boot 3.5.6
+- Le comportement fonctionnel DOIT rester identique
+- Le but est pédagogique :
+  - Montrer comment l’IA aide à transformer un legacy en application moderne
+- Commence immédiatement la génération complète du projet migré.

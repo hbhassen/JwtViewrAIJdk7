@@ -1,84 +1,85 @@
 package com.example.jwtapp.service;
 
-import java.io.IOException;
-import java.security.PublicKey;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-import java.util.Date;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import com.example.jwtapp.entity.JwtTokenEntity;
+import com.example.jwtapp.config.JwtProperties;
+import com.example.jwtapp.domain.entity.JwtTokenEntity;
+import com.example.jwtapp.dto.ValidateRequest;
+import com.example.jwtapp.dto.ValidateResponse;
+import com.example.jwtapp.exception.ResourceNotFoundException;
+import com.example.jwtapp.jwt.JwtPayloadDecoder;
+import com.example.jwtapp.jwt.JwtValidator;
+import com.example.jwtapp.jwt.TokenSanitizer;
 import com.example.jwtapp.repository.JwtTokenRepository;
-import com.example.jwtapp.util.CertificateUtils;
-import com.example.jwtapp.util.JwtUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.transaction.Transactional;
+import java.util.HashMap;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 @Service
 public class JwtService {
 
-    private static final String CERT_PATH = "certs/public.crt";
+    private static final Logger log = LoggerFactory.getLogger(JwtService.class);
 
-    @Autowired
-    private JwtTokenRepository repository;
+    private final JwtTokenRepository repository;
+    private final JwtPayloadDecoder payloadDecoder;
+    private final JwtValidator validator;
+    private final JwtProperties properties;
+    private final TokenSanitizer tokenSanitizer;
+    private final ObjectMapper objectMapper;
 
-    public ValidationResult validateAndStore(String token) {
-        boolean valid = false;
-        String payloadJson = JwtUtils.decodePayload(token);
+    public JwtService(JwtTokenRepository repository,
+                      JwtPayloadDecoder payloadDecoder,
+                      JwtValidator validator,
+                      JwtProperties properties,
+                      TokenSanitizer tokenSanitizer,
+                      ObjectMapper objectMapper) {
+        this.repository = repository;
+        this.payloadDecoder = payloadDecoder;
+        this.validator = validator;
+        this.properties = properties;
+        this.tokenSanitizer = tokenSanitizer;
+        this.objectMapper = objectMapper;
+    }
 
+    @Transactional
+    public ValidateResponse validateAndStore(ValidateRequest request) {
+        var token = request.token();
+        enforceTokenLength(token);
+
+        String payloadJson = "{}";
         try {
-            X509Certificate certificate = CertificateUtils.loadCertificate(CERT_PATH);
-            PublicKey publicKey = CertificateUtils.extractPublicKey(certificate);
-            valid = JwtUtils.validateToken(token, publicKey);
-        } catch (CertificateException e) {
-            valid = false;
-        } catch (IOException e) {
-            valid = false;
+            payloadJson = payloadDecoder.decodePayload(token);
+        } catch (Exception e) {
+            log.warn("Echec de décodage du payload JWT ({})", tokenSanitizer.sanitize(token));
         }
 
-        JwtTokenEntity entity = new JwtTokenEntity(token, payloadJson, Boolean.valueOf(valid), new Date());
+        JwtValidator.JwtValidationResult validationResult = validator.validate(token);
+        JwtTokenEntity entity = new JwtTokenEntity(token, payloadJson, validationResult.valid());
         JwtTokenEntity saved = repository.save(entity);
-        ValidationResult result = new ValidationResult();
-        result.setId(saved.getId());
-        result.setValid(valid);
-        result.setPayloadJson(payloadJson);
-        return result;
+
+        return new ValidateResponse(saved.getId(), validationResult.valid());
     }
 
-    public JwtTokenEntity findToken(Long id) {
-        return repository.findOne(id);
+    @Transactional
+    public Map<String, Object> getPayload(Long id) {
+        JwtTokenEntity entity = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Token introuvable pour l'id " + id));
+        try {
+            return objectMapper.readValue(entity.getPayloadJson(), Map.class);
+        } catch (JsonProcessingException e) {
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("rawPayload", entity.getPayloadJson());
+            fallback.put("warning", "Impossible d'analyser le JSON, payload brut retourné.");
+            return fallback;
+        }
     }
 
-    public static class ValidationResult {
-        private Long id;
-        private boolean valid;
-        private String payloadJson;
-
-        public ValidationResult() {
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public void setId(Long id) {
-            this.id = id;
-        }
-
-        public boolean isValid() {
-            return valid;
-        }
-
-        public void setValid(boolean valid) {
-            this.valid = valid;
-        }
-
-        public String getPayloadJson() {
-            return payloadJson;
-        }
-
-        public void setPayloadJson(String payloadJson) {
-            this.payloadJson = payloadJson;
+    private void enforceTokenLength(String token) {
+        if (token != null && token.length() > properties.getMaxTokenLength()) {
+            throw new IllegalArgumentException("Le token dépasse la taille maximale autorisée (" + properties.getMaxTokenLength() + ")");
         }
     }
 }
